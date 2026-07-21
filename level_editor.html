@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dungeon Level Editor</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h2 { margin-bottom: 10px; color: #fff; }
+        .container { display: flex; gap: 20px; max-width: 1200px; width: 100%; }
+        .main-panel { flex: 3; display: flex; flex-direction: column; align-items: center; }
+        .side-panel { flex: 1; background: #2a2a2a; padding: 15px; border-radius: 8px; display: flex; flex-direction: column; gap: 15px; }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(24, 28px);
+            grid-template-rows: repeat(12, 28px);
+            gap: 1px;
+            background-color: #444;
+            padding: 2px;
+            border-radius: 4px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        .cell {
+            width: 28px;
+            height: 28px;
+            background-color: #fcd8a8;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+            font-family: monospace;
+        }
+        
+        .tile-wall { background-color: #00a800; color: #fff; }
+        .tile-floor { background-color: #fcd8a8; color: #000; }
+        .tile-enemy { background-color: #c83228; color: #fff; }
+        .tile-chest { background-color: #c84c0c; color: #fc9838; }
+        .tile-sword { background-color: #fcd8a8; color: #c84c0c; }
+        .tile-gun { background-color: #fcd8a8; color: #000; }
+        .tile-coin { background-color: #3cbcfc; color: #fff; }
+        .tile-gate { background-color: #000000; color: #fff; }
+        .tile-blue-wall { background-color: #2038ec; color: #fff; }
+
+        .toolbar {
+            margin-top: 15px;
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .btn {
+            background: #444;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn:hover { background: #555; }
+        .btn.active { background: #0088ff; }
+        .btn-danger { background: #a82020; }
+        .btn-danger:hover { background: #c83228; }
+        .btn-success { background: #00aa50; }
+        .btn-success:hover { background: #00cc60; }
+        
+        .level-selector-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+            background: #2a2a2a;
+            padding: 10px 20px;
+            border-radius: 8px;
+        }
+        .level-selector {
+            display: flex;
+            gap: 5px;
+        }
+        
+        textarea {
+            width: 100%;
+            height: 250px;
+            background: #111;
+            color: #00ff00;
+            border: 1px solid #444;
+            font-family: monospace;
+            padding: 10px;
+            resize: vertical;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        label { font-weight: bold; font-size: 14px; display: block; margin-bottom: 5px; }
+        input[type="text"] {
+            width: 100%;
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            padding: 6px;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+
+<h2>Dungeon Level Editor</h2>
+
+<div class="level-selector-container">
+    <div class="level-selector" id="level-buttons">
+    </div>
+    <div style="height: 20px; width: 1px; background: #555;"></div>
+    <button class="btn btn-success" onclick="addNewLevel()">+ Add Level</button>
+    <button class="btn btn-danger" id="delete-btn" onclick="deleteCurrentLevel()">Delete Current</button>
+</div>
+
+<div class="container">
+    <div class="main-panel">
+        <div class="grid" id="editor-grid"></div>
+        
+        <div class="toolbar" id="palette">
+        </div>
+    </div>
+    
+    <div class="side-panel">
+        <div>
+            <label>Map Routing Links</label>
+            <div id="links-container" style="display:flex; flex-direction:column; gap:8px;">
+            </div>
+        </div>
+        
+        <div>
+            <label>Exported Python Configuration</label>
+            <textarea id="output-box" readonly onclick="this.select()"></textarea>
+        </div>
+        <button class="btn" style="background:#0088ff; width:100%;" onclick="updateExport()">Generate Data</button>
+    </div>
+</div>
+
+<script>
+    const COLS = 24;
+    const ROWS = 12;
+    
+    const TILES = {
+        '.': { name: 'Floor', className: 'tile-floor' },
+        '#': { name: 'Green Wall', className: 'tile-wall' },
+        '1': { name: 'Blue Wall / Link 1', className: 'tile-blue-wall' },
+        '2': { name: 'Link 2', className: 'tile-gate' },
+        '3': { name: 'Link 3', className: 'tile-gate' },
+        '4': { name: 'Link 4', className: 'tile-gate' },
+        '5': { name: 'Link 5', className: 'tile-gate' },
+        '6': { name: 'Link 6', className: 'tile-gate' },
+        '7': { name: 'Link 7', className: 'tile-gate' },
+        '8': { name: 'Link 8', className: 'tile-gate' },
+        '9': { name: 'Link 9', className: 'tile-gate' },
+        '0': { name: 'Link 0', className: 'tile-gate' },
+        '>': { name: 'Default Exit', className: 'tile-gate' },
+        'E': { name: 'Enemy', className: 'tile-enemy' },
+        'C': { name: 'Chest', className: 'tile-chest' },
+        'W': { name: 'Sword', className: 'tile-sword' },
+        'G': { name: 'Gun', className: 'tile-gun' },
+        '$': { name: 'Coin', className: 'tile-coin' }
+    };
+
+    let currentLevel = 'start';
+    let currentSelectedTile = '#';
+    let isMouseDown = false;
+
+    let mapData = {
+        "start": Array(ROWS).fill().map(() => Array(COLS).fill('.')),
+        "level2": Array(ROWS).fill().map(() => Array(COLS).fill('.')),
+        "level3": Array(ROWS).fill().map(() => Array(COLS).fill('.'))
+    };
+
+    let mapLinks = {
+        "start": {"1": "level2"},
+        "level2": {"2": "level3"},
+        "level3": {}
+    };
+
+    for(let i=0; i<COLS; i++) {
+        mapData.start[0][i] = '#'; mapData.start[ROWS-1][i] = '#';
+        mapData.level2[0][i] = '#'; mapData.level2[ROWS-1][i] = '1';
+        mapData.level3[0][i] = '#'; mapData.level3[ROWS-1][i] = '#';
+    }
+    for(let i=0; i<ROWS; i++) {
+        mapData.start[i][0] = '#'; mapData.start[i][COLS-1] = '#';
+        mapData.level2[i][0] = '#'; mapData.level2[i][COLS-1] = '#';
+        mapData.level3[i][0] = '#'; mapData.level3[i][COLS-1] = '#';
+    }
+    mapData.start[10][22] = '>'; mapData.start[10][23] = '1';
+    mapData.level2[9][21] = '>'; mapData.level2[9][22] = '2';
+
+    function initEditor() {
+        const gridContainer = document.getElementById('editor-grid');
+        gridContainer.innerHTML = '';
+        
+        for (let y = 0; y < ROWS; y++) {
+            for (let x = 0; x < COLS; x++) {
+                const cell = document.createElement('div');
+                cell.classList.add('cell');
+                cell.dataset.x = x;
+                cell.dataset.y = y;
+                
+                cell.addEventListener('mousedown', (e) => {
+                    isMouseDown = true;
+                    paintTile(cell);
+                });
+                cell.addEventListener('mouseenter', () => {
+                    if (isMouseDown) paintTile(cell);
+                });
+                gridContainer.appendChild(cell);
+            }
+        }
+        
+        document.body.addEventListener('mouseup', () => isMouseDown = false);
+        
+        const palette = document.getElementById('palette');
+        palette.innerHTML = '';
+        Object.keys(TILES).forEach(key => {
+            const btn = document.createElement('button');
+            btn.className = `btn ${TILES[key].className}`;
+            btn.style.border = "1px solid #fff";
+            btn.innerText = `${key} : ${TILES[key].name}`;
+            btn.onclick = () => {
+                document.querySelectorAll('#palette .btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentSelectedTile = key;
+            };
+            if(key === currentSelectedTile) btn.classList.add('active');
+            palette.appendChild(btn);
+        });
+
+        renderLevelButtons();
+        renderCurrentGrid();
+        renderLinkInputs();
+        updateExport();
+    }
+
+    function renderLevelButtons() {
+        const container = document.getElementById('level-buttons');
+        container.innerHTML = '';
+        
+        Object.keys(mapData).forEach(levelKey => {
+            const btn = document.createElement('button');
+            btn.className = 'btn';
+            if(levelKey === currentLevel) btn.classList.add('active');
+            btn.innerText = levelKey;
+            btn.onclick = () => switchLevel(levelKey);
+            container.appendChild(btn);
+        });
+
+        document.getElementById('delete-btn').disabled = (currentLevel === 'start');
+    }
+
+    function addNewLevel() {
+        const name = prompt("Enter unique name for new level:");
+        if(!name || name.trim() === "") return;
+        const safeName = name.replace(/[^a-zA-Z0-9_]/g, "").trim();
+        if(safeName === "") return;
+        
+        if(mapData[safeName]) {
+            alert("A level with that name already exists!");
+            return;
+        }
+
+        mapData[safeName] = Array(ROWS).fill().map(() => Array(COLS).fill('.'));
+        for(let i=0; i<COLS; i++) {
+            mapData[safeName][0][i] = '#';
+            mapData[safeName][ROWS-1][i] = '#';
+        }
+        for(let i=0; i<ROWS; i++) {
+            mapData[safeName][i][0] = '#';
+            mapData[safeName][i][COLS-1] = '#';
+        }
+
+        mapLinks[safeName] = {};
+        
+        currentLevel = safeName;
+        renderLevelButtons();
+        renderCurrentGrid();
+        renderLinkInputs();
+        updateExport();
+    }
+
+    function deleteCurrentLevel() {
+        if(currentLevel === 'start') return;
+        if(!confirm(`Are you sure you want to delete "${currentLevel}"?`)) return;
+
+        delete mapData[currentLevel];
+        delete mapLinks[currentLevel];
+
+        Object.keys(mapLinks).forEach(src => {
+            Object.keys(mapLinks[src]).forEach(digit => {
+                if(mapLinks[src][digit] === currentLevel) {
+                    delete mapLinks[src][digit];
+                }
+            });
+        });
+
+        currentLevel = 'start';
+        renderLevelButtons();
+        renderCurrentGrid();
+        renderLinkInputs();
+        updateExport();
+    }
+
+    function paintTile(cell) {
+        const x = cell.dataset.x;
+        const y = cell.dataset.y;
+        mapData[currentLevel][y][x] = currentSelectedTile;
+        renderCell(cell, currentSelectedTile);
+    }
+
+    function renderCell(cell, tileToken) {
+        cell.className = 'cell ' + (TILES[tileToken] ? TILES[tileToken].className : 'tile-floor');
+        cell.innerText = (tileToken === '.' || tileToken === '#') ? '' : tileToken;
+    }
+
+    function renderCurrentGrid() {
+        const cells = document.querySelectorAll('.cell');
+        cells.forEach(cell => {
+            const x = cell.dataset.x;
+            const y = cell.dataset.y;
+            const token = mapData[currentLevel][y][x];
+            renderCell(cell, token);
+        });
+    }
+
+    function switchLevel(levelKey) {
+        currentLevel = levelKey;
+        renderLevelButtons();
+        renderCurrentGrid();
+        renderLinkInputs();
+    }
+
+    function renderLinkInputs() {
+        const container = document.getElementById('links-container');
+        container.innerHTML = '';
+        
+        let activeDigits = new Set();
+        for(let y=0; y<ROWS; y++) {
+            for(let x=0; x<COLS; x++) {
+                const token = mapData[currentLevel][y][x];
+                if(/^\d$/.test(token)) {
+                    activeDigits.add(token);
+                }
+            }
+        }
+
+        if(activeDigits.size === 0) {
+            container.innerHTML = '<div style="font-size:12px; color:#888;">No digit trigger tiles drawn on this map.</div>';
+            return;
+        }
+
+        activeDigits.forEach(digit => {
+            const div = document.createElement('div');
+            div.style.display = 'flex';
+            div.style.alignItems = 'center';
+            div.style.gap = '10px';
+            
+            const label = document.createElement('span');
+            label.innerText = `Tile [${digit}] goes to:`;
+            label.style.fontSize = '13px';
+            label.style.width = '110px';
+            
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = (mapLinks[currentLevel] && mapLinks[currentLevel][digit]) ? mapLinks[currentLevel][digit] : '';
+            input.oninput = (e) => {
+                if(!mapLinks[currentLevel]) mapLinks[currentLevel] = {};
+                if(e.target.value.trim() === "") {
+                    delete mapLinks[currentLevel][digit];
+                } else {
+                    mapLinks[currentLevel][digit] = e.target.value.trim();
+                }
+            };
+            
+            div.appendChild(label);
+            div.appendChild(input);
+            container.appendChild(div);
+        });
+    }
+
+    function updateExport() {
+        let exportStr = "MAPS = {\n";
+        const mapKeys = Object.keys(mapData);
+        
+        mapKeys.forEach((mKey, mIdx) => {
+            exportStr += `    "${mKey}": [\n`;
+            for(let y=0; y<ROWS; y++) {
+                let rowLine = mapData[mKey][y].join('');
+                exportStr += `        "${rowLine}"${y < ROWS - 1 ? ',' : ''}\n`;
+            }
+            exportStr += `    ]${mIdx < mapKeys.length - 1 ? ',' : ''}\n`;
+        });
+        exportStr += "}\n\nMAP_LINKS = {\n";
+        
+        mapKeys.forEach((mKey, mIdx) => {
+            exportStr += `    "${mKey}": {`;
+            const targets = mapLinks[mKey] ? Object.keys(mapLinks[mKey]) : [];
+            if(targets.length > 0) {
+                exportStr += "\n";
+                targets.forEach((tKey, tIdx) => {
+                    exportStr += `        "${tKey}": "${mapLinks[mKey][tKey]}"${tIdx < targets.length - 1 ? ',' : ''}\n`;
+                });
+                exportStr += "    }";
+            } else {
+                exportStr += "}";
+            }
+            exportStr += `${mIdx < mapKeys.length - 1 ? ',' : ''}\n`;
+        });
+        exportStr += "}";
+        
+        document.getElementById('output-box').value = exportStr;
+    }
+
+    window.onload = initEditor;
+</script>
+</body>
+</html>
